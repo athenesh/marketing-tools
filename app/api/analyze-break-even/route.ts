@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { product } = await request.json();
+    const { fixedCost, variableCost, sellingPrice } = await request.json();
 
-    if (!product) {
+    if (fixedCost === undefined || variableCost === undefined || sellingPrice === undefined) {
       return NextResponse.json(
-        { error: '상품 정보가 필요합니다.' },
+        { error: '고정비, 변동비, 판매가가 필요합니다.' },
         { status: 400 }
       );
     }
@@ -24,47 +24,65 @@ export async function POST(request: NextRequest) {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     // 계산된 지표들
-    const revenue = product.salePrice * product.conversions;
-    const roas = product.adCost > 0 ? revenue / product.adCost : 0;
-    const netProfit = product.profitPerUnit * product.conversions - product.adCost;
-    const roi = product.adCost > 0 ? (netProfit / product.adCost) * 100 : 0;
+    const breakEvenUnits = fixedCost / (sellingPrice - variableCost);
+    const breakEvenRevenue = breakEvenUnits * sellingPrice;
+    const contributionMargin = sellingPrice - variableCost;
+    const contributionMarginRatio = (contributionMargin / sellingPrice) * 100;
 
-    const prompt = `다음 상품의 광고 성과 데이터를 분석하고 개선 방안을 제시해주세요.
+    const prompt = `다음 손익분기점 데이터를 분석하고 개선 방안을 제시해주세요.
 
-**상품 정보:**
-- 상품명: ${product.name}
-- 판매가: ${product.salePrice.toLocaleString()}원
-- 개당 순이익: ${product.profitPerUnit.toLocaleString()}원
-- 광고비: ${product.adCost.toLocaleString()}원
-- 전환수: ${product.conversions}건
-
-**계산된 지표:**
-- 매출: ${revenue.toLocaleString()}원
-- ROAS: ${(roas * 100).toFixed(1)}%
-- ROI: ${roi.toFixed(1)}%
-- 순이익: ${netProfit.toLocaleString()}원
+**현재 데이터:**
+- 고정비: ${fixedCost.toLocaleString()}원
+- 변동비(개당): ${variableCost.toLocaleString()}원
+- 판매가(개당): ${sellingPrice.toLocaleString()}원
+- 손익분기점 수량: ${Math.ceil(breakEvenUnits).toLocaleString()}개
+- 손익분기점 매출: ${breakEvenRevenue.toLocaleString()}원
+- 공헌이익(개당): ${contributionMargin.toLocaleString()}원
+- 공헌이익률: ${contributionMarginRatio.toFixed(2)}%
 
 다음 형식으로 JSON을 반환해주세요:
 {
-  "summary": "현재 성과에 대한 한 줄 요약",
+  "summary": "현재 손익분기점 상태에 대한 한 줄 요약",
+  "analysis": {
+    "breakEvenUnits": ${breakEvenUnits},
+    "breakEvenRevenue": ${breakEvenRevenue},
+    "contributionMargin": ${contributionMargin},
+    "contributionMarginRatio": ${contributionMarginRatio},
+    "riskLevel": "high|medium|low",
+    "message": "손익분기점 달성 난이도 평가"
+  },
   "strengths": ["강점1", "강점2", "강점3"],
   "weaknesses": ["약점1", "약점2", "약점3"],
   "recommendations": [
     {
       "title": "개선 제안 제목",
       "description": "구체적인 개선 방안 설명",
-      "priority": "high|medium|low"
+      "priority": "high|medium|low",
+      "expectedImpact": "예상 효과 설명",
+      "actionItems": ["실행 항목1", "실행 항목2"]
     }
   ],
-  "optimization": {
-    "suggestedAdCost": 추천_광고비_숫자,
-    "suggestedConversions": 추천_전환수_숫자,
-    "expectedProfit": 예상_순이익_숫자,
-    "reason": "최적화 이유 설명"
+  "costOptimization": {
+    "fixedCostReduction": {
+      "suggestions": ["고정비 절감 방안1", "고정비 절감 방안2"],
+      "potentialSavings": 예상_절감액_숫자
+    },
+    "variableCostReduction": {
+      "suggestions": ["변동비 절감 방안1", "변동비 절감 방안2"],
+      "potentialSavings": 예상_절감액_숫자
+    }
+  },
+  "pricingStrategy": {
+    "currentPrice": ${sellingPrice},
+    "suggestedPrice": 추천_판매가_숫자,
+    "reason": "가격 조정 이유",
+    "expectedUnits": 예상_판매량_숫자
   }
 }
 
 반환 형식은 반드시 유효한 JSON이어야 하며, 다른 설명 없이 JSON만 반환해주세요.`;
+
+    console.log('🤖 [손익분기점 AI 분석] 요청 시작:', { fixedCost, variableCost, sellingPrice });
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -83,7 +101,7 @@ export async function POST(request: NextRequest) {
     try {
       analysis = JSON.parse(jsonText);
     } catch (parseError) {
-      console.error('❌ [상품 분석] JSON 파싱 오류:', parseError);
+      console.error('❌ [손익분기점 AI 분석] JSON 파싱 오류:', parseError);
       console.error('원본 응답:', jsonText.substring(0, 500));
       return NextResponse.json(
         { 
@@ -94,11 +112,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('✅ [손익분기점 AI 분석] 완료');
+
     return NextResponse.json(analysis);
   } catch (error: any) {
-    console.error('❌ [상품 분석] 오류:', error);
+    console.error('❌ [손익분기점 AI 분석] 오류:', error);
     
-    let errorMessage = '상품 분석 중 오류가 발생했습니다.';
+    let errorMessage = '손익분기점 분석 중 오류가 발생했습니다.';
     let errorDetails = '알 수 없는 오류입니다.';
     
     if (error?.message?.includes('API_KEY')) {

@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { product } = await request.json();
+    const { avgOrderValue, purchaseFrequency, customerLifespan, profitMargin, acquisitionCost } = await request.json();
 
-    if (!product) {
+    if (avgOrderValue === undefined || purchaseFrequency === undefined || customerLifespan === undefined) {
       return NextResponse.json(
-        { error: '상품 정보가 필요합니다.' },
+        { error: '평균 주문 금액, 구매 빈도, 고객 생애 기간이 필요합니다.' },
         { status: 400 }
       );
     }
@@ -24,47 +24,69 @@ export async function POST(request: NextRequest) {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     // 계산된 지표들
-    const revenue = product.salePrice * product.conversions;
-    const roas = product.adCost > 0 ? revenue / product.adCost : 0;
-    const netProfit = product.profitPerUnit * product.conversions - product.adCost;
-    const roi = product.adCost > 0 ? (netProfit / product.adCost) * 100 : 0;
+    const clv = avgOrderValue * purchaseFrequency * customerLifespan;
+    const ltv = clv * (profitMargin / 100);
+    const netLtv = ltv - (acquisitionCost || 0);
+    const ltvCacRatio = acquisitionCost > 0 ? ltv / acquisitionCost : 0;
 
-    const prompt = `다음 상품의 광고 성과 데이터를 분석하고 개선 방안을 제시해주세요.
+    const prompt = `다음 LTV 데이터를 분석하고 개선 방안을 제시해주세요.
 
-**상품 정보:**
-- 상품명: ${product.name}
-- 판매가: ${product.salePrice.toLocaleString()}원
-- 개당 순이익: ${product.profitPerUnit.toLocaleString()}원
-- 광고비: ${product.adCost.toLocaleString()}원
-- 전환수: ${product.conversions}건
+**현재 데이터:**
+- 평균 주문 금액: ${avgOrderValue.toLocaleString()}원
+- 연간 구매 빈도: ${purchaseFrequency}회
+- 고객 생애 기간: ${customerLifespan}년
+- 이익률: ${profitMargin}%
+- 고객 획득 비용(CAC): ${acquisitionCost ? acquisitionCost.toLocaleString() + '원' : '미입력'}
 
 **계산된 지표:**
-- 매출: ${revenue.toLocaleString()}원
-- ROAS: ${(roas * 100).toFixed(1)}%
-- ROI: ${roi.toFixed(1)}%
-- 순이익: ${netProfit.toLocaleString()}원
+- CLV (총 매출): ${clv.toLocaleString()}원
+- LTV (이익 기준): ${ltv.toLocaleString()}원
+- 순 LTV: ${netLtv.toLocaleString()}원
+- LTV/CAC 비율: ${ltvCacRatio.toFixed(2)}
 
 다음 형식으로 JSON을 반환해주세요:
 {
-  "summary": "현재 성과에 대한 한 줄 요약",
+  "summary": "현재 LTV 성과에 대한 한 줄 요약",
+  "analysis": {
+    "clv": ${clv},
+    "ltv": ${ltv},
+    "netLtv": ${netLtv},
+    "ltvCacRatio": ${ltvCacRatio},
+    "status": "excellent|good|fair|poor",
+    "message": "LTV/CAC 비율 평가 및 상태 설명"
+  },
   "strengths": ["강점1", "강점2", "강점3"],
   "weaknesses": ["약점1", "약점2", "약점3"],
   "recommendations": [
     {
       "title": "개선 제안 제목",
       "description": "구체적인 개선 방안 설명",
-      "priority": "high|medium|low"
+      "priority": "high|medium|low",
+      "expectedImprovement": "예상 개선 효과 설명",
+      "actionItems": ["실행 항목1", "실행 항목2"]
     }
   ],
-  "optimization": {
-    "suggestedAdCost": 추천_광고비_숫자,
-    "suggestedConversions": 추천_전환수_숫자,
-    "expectedProfit": 예상_순이익_숫자,
-    "reason": "최적화 이유 설명"
+  "ltvImprovement": {
+    "strategies": [
+      {
+        "title": "LTV 향상 전략",
+        "description": "구체적인 전략 설명",
+        "expectedIncrease": 예상_증가율_숫자,
+        "impact": "high|medium|low"
+      }
+    ]
+  },
+  "cacOptimization": {
+    "currentCac": ${acquisitionCost || 0},
+    "suggestedCac": 추천_CAC_숫자,
+    "strategies": ["CAC 절감 방안1", "CAC 절감 방안2"],
+    "reason": "CAC 최적화 이유"
   }
 }
 
 반환 형식은 반드시 유효한 JSON이어야 하며, 다른 설명 없이 JSON만 반환해주세요.`;
+
+    console.log('🤖 [LTV AI 분석] 요청 시작:', { avgOrderValue, purchaseFrequency, customerLifespan });
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -83,7 +105,7 @@ export async function POST(request: NextRequest) {
     try {
       analysis = JSON.parse(jsonText);
     } catch (parseError) {
-      console.error('❌ [상품 분석] JSON 파싱 오류:', parseError);
+      console.error('❌ [LTV AI 분석] JSON 파싱 오류:', parseError);
       console.error('원본 응답:', jsonText.substring(0, 500));
       return NextResponse.json(
         { 
@@ -94,11 +116,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('✅ [LTV AI 분석] 완료');
+
     return NextResponse.json(analysis);
   } catch (error: any) {
-    console.error('❌ [상품 분석] 오류:', error);
+    console.error('❌ [LTV AI 분석] 오류:', error);
     
-    let errorMessage = '상품 분석 중 오류가 발생했습니다.';
+    let errorMessage = 'LTV 분석 중 오류가 발생했습니다.';
     let errorDetails = '알 수 없는 오류입니다.';
     
     if (error?.message?.includes('API_KEY')) {

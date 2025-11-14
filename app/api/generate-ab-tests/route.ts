@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const conversionRate = (conversions / visitors) * 100;
 
@@ -82,15 +82,49 @@ export async function POST(request: NextRequest) {
       jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
 
-    const abTests = JSON.parse(jsonText);
+    // JSON 파싱 시도
+    let abTests;
+    try {
+      abTests = JSON.parse(jsonText);
+    } catch (parseError) {
+      console.error('❌ [A/B 테스트 생성] JSON 파싱 오류:', parseError);
+      console.error('원본 응답:', jsonText.substring(0, 500));
+      return NextResponse.json(
+        { 
+          error: 'AI 응답을 파싱하는 중 오류가 발생했습니다.',
+          details: '응답 형식이 올바르지 않습니다. 다시 시도해주세요.'
+        },
+        { status: 500 }
+      );
+    }
 
     console.log('✅ [A/B 테스트 생성] 완료');
 
     return NextResponse.json(abTests);
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ [A/B 테스트 생성] 오류:', error);
+    
+    let errorMessage = 'A/B 테스트 아이디어 생성 중 오류가 발생했습니다.';
+    let errorDetails = '알 수 없는 오류입니다.';
+    
+    if (error?.message?.includes('API_KEY')) {
+      errorMessage = 'Gemini API 키가 유효하지 않습니다.';
+      errorDetails = '환경 변수 GEMINI_API_KEY를 확인해주세요.';
+    } else if (error?.message?.includes('quota') || error?.message?.includes('limit')) {
+      errorMessage = 'API 사용량 한도를 초과했습니다.';
+      errorDetails = '잠시 후 다시 시도해주세요.';
+    } else if (error?.message?.includes('model')) {
+      errorMessage = 'AI 모델을 사용할 수 없습니다.';
+      errorDetails = '모델 이름을 확인해주세요.';
+    } else if (error?.message) {
+      errorDetails = error.message;
+    }
+    
     return NextResponse.json(
-      { error: 'A/B 테스트 아이디어 생성 중 오류가 발생했습니다.' },
+      { 
+        error: errorMessage,
+        details: errorDetails
+      },
       { status: 500 }
     );
   }

@@ -171,15 +171,16 @@ export default function ConversionRatePage() {
       });
 
       if (!response.ok) {
-        throw new Error('분석 실패');
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.details || '분석 실패');
       }
 
       const data = await response.json();
       setAnalysisResult(data);
       console.log('✅ [전환율 AI 분석] 완료:', data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [전환율 AI 분석] 오류:', error);
-      alert('AI 분석 중 오류가 발생했습니다.');
+      alert(error?.message || 'AI 분석 중 오류가 발생했습니다.');
     } finally {
       setLoadingAnalysis(false);
     }
@@ -210,15 +211,16 @@ export default function ConversionRatePage() {
       });
 
       if (!response.ok) {
-        throw new Error('최적화 실패');
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.details || '최적화 실패');
       }
 
       const data = await response.json();
       setOptimizationResult(data);
       console.log('✅ [전환율 최적화] 완료:', data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [전환율 최적화] 오류:', error);
-      alert('최적화 전략 생성 중 오류가 발생했습니다.');
+      alert(error?.message || '최적화 전략 생성 중 오류가 발생했습니다.');
     } finally {
       setLoadingOptimization(false);
     }
@@ -249,15 +251,16 @@ export default function ConversionRatePage() {
       });
 
       if (!response.ok) {
-        throw new Error('A/B 테스트 생성 실패');
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.details || 'A/B 테스트 생성 실패');
       }
 
       const data = await response.json();
       setAbTestResult(data);
       console.log('✅ [A/B 테스트 생성] 완료:', data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [A/B 테스트 생성] 오류:', error);
-      alert('A/B 테스트 아이디어 생성 중 오류가 발생했습니다.');
+      alert(error?.message || 'A/B 테스트 아이디어 생성 중 오류가 발생했습니다.');
     } finally {
       setLoadingABTests(false);
     }

@@ -2,6 +2,46 @@
 
 import { useState } from 'react';
 
+// AI 분석 결과 타입
+interface TargetCPAAnalysisResult {
+  summary: string;
+  analysis: {
+    targetCPA: number;
+    profitMargin: number;
+    status: 'excellent' | 'good' | 'fair' | 'poor';
+    message: string;
+  };
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: Array<{
+    title: string;
+    description: string;
+    priority: 'high' | 'medium' | 'low';
+    expectedImpact: string;
+    actionItems: string[];
+  }>;
+  advertisingStrategy: {
+    budgetAllocation: {
+      suggestedDailyBudget: number;
+      suggestedMonthlyBudget: number;
+      reason: string;
+    };
+    channels: Array<{
+      name: string;
+      description: string;
+      suitability: 'high' | 'medium' | 'low';
+      expectedCPA: number;
+    }>;
+    optimizationTips: string[];
+  };
+  pricingStrategy: {
+    currentPrice: number;
+    suggestedPrice: number;
+    reason: string;
+    expectedCPA: number;
+  };
+}
+
 export default function TargetCPAPage() {
   // 입력 상태
   const [salePrice, setSalePrice] = useState<number>(0); // 판매가
@@ -10,6 +50,10 @@ export default function TargetCPAPage() {
   // 계산 결과
   const [targetCPA, setTargetCPA] = useState<number | null>(null); // 목표 CPA
   const [profitMargin, setProfitMargin] = useState<number | null>(null); // 이익률
+
+  // AI 분석 상태
+  const [analysisResult, setAnalysisResult] = useState<TargetCPAAnalysisResult | null>(null);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
 
   console.log('🎯 [목표 CPA] 입력값:', { salePrice, costPrice });
 
@@ -54,7 +98,73 @@ export default function TargetCPAPage() {
     setCostPrice(0);
     setTargetCPA(null);
     setProfitMargin(null);
+    setAnalysisResult(null);
     console.log('🔄 [목표 CPA] 초기화');
+  };
+
+  // AI 분석 함수
+  const handleAnalyze = async () => {
+    if (targetCPA === null) {
+      alert('먼저 목표 CPA를 계산해주세요!');
+      return;
+    }
+
+    setLoadingAnalysis(true);
+
+    try {
+      console.log('🤖 [목표 CPA AI 분석] 시작...');
+      const response = await fetch('/api/analyze-target-cpa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          salePrice,
+          costPrice,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.details || '분석 실패');
+      }
+
+      const data = await response.json();
+      setAnalysisResult(data);
+      console.log('✅ [목표 CPA AI 분석] 완료:', data);
+    } catch (error: any) {
+      console.error('❌ [목표 CPA AI 분석] 오류:', error);
+      alert(error?.message || 'AI 분석 중 오류가 발생했습니다.');
+    } finally {
+      setLoadingAnalysis(false);
+    }
+  };
+
+  // 우선순위 색상
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return 'bg-red-100 text-red-800 border-red-300';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case 'low':
+        return 'bg-green-100 text-green-800 border-green-300';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'excellent':
+        return 'text-green-600 bg-green-50';
+      case 'good':
+        return 'text-blue-600 bg-blue-50';
+      case 'fair':
+        return 'text-yellow-600 bg-yellow-50';
+      case 'poor':
+        return 'text-red-600 bg-red-50';
+      default:
+        return 'text-gray-600 bg-gray-50';
+    }
   };
 
   return (
@@ -240,6 +350,195 @@ export default function TargetCPAPage() {
                 </div>
               </div>
             </div>
+
+            {/* AI 분석 버튼 */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="text-center">
+                <button
+                  onClick={handleAnalyze}
+                  disabled={loadingAnalysis}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all font-semibold shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-lg"
+                >
+                  {loadingAnalysis ? '🤖 AI 분석 중...' : '🤖 AI 분석하기'}
+                </button>
+                <p className="text-sm text-gray-500 mt-3">
+                  AI가 목표 CPA를 분석하고 광고 전략을 제시합니다
+                </p>
+              </div>
+            </div>
+
+            {/* AI 분석 결과 */}
+            {analysisResult && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  🤖 AI 분석 결과
+                </h3>
+
+                {/* 요약 */}
+                <div className="bg-blue-50 rounded-lg p-4 mb-6 border-l-4 border-blue-500">
+                  <p className="text-gray-700 font-medium">{analysisResult.summary}</p>
+                </div>
+
+                {/* 분석 상세 */}
+                <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                  <h4 className="font-semibold text-gray-800 mb-3">📊 상세 분석</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-3">
+                    <div>
+                      <div className="text-sm text-gray-600">목표 CPA</div>
+                      <div className="text-xl font-bold text-blue-600">
+                        {analysisResult.analysis.targetCPA.toLocaleString()}원
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600">이익률</div>
+                      <div className="text-xl font-bold text-green-600">
+                        {analysisResult.analysis.profitMargin.toFixed(1)}%
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600">상태</div>
+                      <div className={`text-xl font-bold px-3 py-1 rounded ${getStatusColor(analysisResult.analysis.status)}`}>
+                        {analysisResult.analysis.status === 'excellent' ? '우수' : analysisResult.analysis.status === 'good' ? '양호' : analysisResult.analysis.status === 'fair' ? '보통' : '개선필요'}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600">{analysisResult.analysis.message}</p>
+                </div>
+
+                {/* 강점/약점 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-green-800 mb-3">✅ 강점</h4>
+                    <ul className="space-y-2">
+                      {analysisResult.strengths.map((strength, idx) => (
+                        <li key={idx} className="text-sm text-green-700 flex items-start">
+                          <span className="mr-2">•</span>
+                          <span>{strength}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="bg-red-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-red-800 mb-3">⚠️ 개선 필요</h4>
+                    <ul className="space-y-2">
+                      {analysisResult.weaknesses.map((weakness, idx) => (
+                        <li key={idx} className="text-sm text-red-700 flex items-start">
+                          <span className="mr-2">•</span>
+                          <span>{weakness}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* 개선 방안 */}
+                <div className="mb-6">
+                  <h4 className="font-semibold text-gray-800 mb-4">💡 개선 방안</h4>
+                  <div className="space-y-4">
+                    {analysisResult.recommendations.map((rec, idx) => (
+                      <div
+                        key={idx}
+                        className={`border-2 rounded-lg p-4 ${getPriorityColor(rec.priority)}`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <h5 className="font-bold">{rec.title}</h5>
+                          <span className="text-xs px-2 py-1 rounded bg-white/50">
+                            {rec.priority === 'high' ? '높음' : rec.priority === 'medium' ? '중간' : '낮음'}
+                          </span>
+                        </div>
+                        <p className="text-sm mb-2">{rec.description}</p>
+                        <p className="text-xs text-gray-600 mb-2">예상 효과: {rec.expectedImpact}</p>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">실행 항목:</div>
+                          <ul className="space-y-1">
+                            {rec.actionItems.map((action, actionIdx) => (
+                              <li key={actionIdx} className="text-xs text-gray-700 flex items-start">
+                                <span className="mr-2">✓</span>
+                                <span>{action}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 광고 전략 */}
+                <div className="mb-6">
+                  <h4 className="font-semibold text-gray-800 mb-4">📢 광고 전략</h4>
+                  <div className="bg-indigo-50 rounded-lg p-4 border-l-4 border-indigo-500 mb-4">
+                    <h5 className="font-bold text-indigo-800 mb-3">예산 배분</h5>
+                    <div className="grid grid-cols-2 gap-4 mb-3">
+                      <div>
+                        <div className="text-xs text-gray-600">일일 예산</div>
+                        <div className="text-lg font-bold text-indigo-600">
+                          {analysisResult.advertisingStrategy.budgetAllocation.suggestedDailyBudget.toLocaleString()}원
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-600">월간 예산</div>
+                        <div className="text-lg font-bold text-indigo-600">
+                          {analysisResult.advertisingStrategy.budgetAllocation.suggestedMonthlyBudget.toLocaleString()}원
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-sm text-indigo-700">{analysisResult.advertisingStrategy.budgetAllocation.reason}</p>
+                  </div>
+                  <div className="mb-4">
+                    <h5 className="font-bold text-gray-800 mb-3">추천 채널</h5>
+                    <div className="space-y-3">
+                      {analysisResult.advertisingStrategy.channels.map((channel, idx) => (
+                        <div key={idx} className="bg-white rounded-lg p-4 border-2 border-gray-200">
+                          <div className="flex items-start justify-between mb-2">
+                            <h6 className="font-bold text-gray-800">{channel.name}</h6>
+                            <span className={`text-xs px-2 py-1 rounded ${channel.suitability === 'high' ? 'bg-green-100 text-green-800' : channel.suitability === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                              {channel.suitability === 'high' ? '적합' : channel.suitability === 'medium' ? '보통' : '부적합'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2">{channel.description}</p>
+                          <p className="text-xs text-gray-600">예상 CPA: {channel.expectedCPA.toLocaleString()}원</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-gray-800 mb-3">최적화 팁</h5>
+                    <ul className="space-y-2">
+                      {analysisResult.advertisingStrategy.optimizationTips.map((tip, idx) => (
+                        <li key={idx} className="text-sm text-gray-700 flex items-start">
+                          <span className="mr-2">•</span>
+                          <span>{tip}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* 가격 전략 */}
+                <div className="bg-purple-50 rounded-lg p-4 border-l-4 border-purple-500">
+                  <h4 className="font-bold text-purple-800 mb-3">🎯 가격 전략 제안</h4>
+                  <div className="grid grid-cols-2 gap-4 mb-3">
+                    <div>
+                      <div className="text-xs text-gray-600">현재 가격</div>
+                      <div className="text-lg font-bold text-gray-700">
+                        {analysisResult.pricingStrategy.currentPrice.toLocaleString()}원
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-600">제안 가격</div>
+                      <div className="text-lg font-bold text-purple-600">
+                        {analysisResult.pricingStrategy.suggestedPrice.toLocaleString()}원
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-purple-700 mb-2">{analysisResult.pricingStrategy.reason}</p>
+                  <p className="text-xs text-purple-600">
+                    예상 CPA: {analysisResult.pricingStrategy.expectedCPA.toLocaleString()}원
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* 사용 예시 */}
             <div className="bg-white rounded-lg shadow-md p-6">
